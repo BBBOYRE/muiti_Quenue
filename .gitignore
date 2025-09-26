@@ -1,38 +1,38 @@
 # 通用忽略规则
-*.pyc          # Python 字节码
-__pycache__/   # Python 缓存目录
-.pytest_cache/  # pytest 缓存
-*.egg-info/     # 打包生成的元数据
-dist/           # 分发构建目录
-build/          # 编译生成文件
+*.pyc         
+__pycache__/ 
+.pytest_cache/  
+*.egg-info/   
+dist/           
+build/          
 
 # 虚拟环境（根据使用工具选择）
-venv/          # venv 虚拟环境
-.env/          # virtualenv 虚拟环境
-.python-version # pyenv 版本文件
+venv/    
+.env/    
+.python-version 
 
 # 开发环境文件
-.vscode/        # VS Code 配置
-.idea/          # PyCharm/IntelliJ 配置
-.DS_Store       # macOS 系统文件
+.vscode/   
+.idea/       
+.DS_Store     
 
 # 测试和覆盖率报告
-.coverage       # 覆盖率数据
-htmlcov/        # HTML 覆盖率报告
+.coverage 
+htmlcov/     
 
 # 日志文件
 *.log
 logs/
 
 # 配置文件（包含敏感信息）
-.env            # 环境变量文件
-config.ini      # 配置文件
-secrets.json    # 密钥文件
+.env     
+config.ini    
+secrets.json 
 
 # Jupyter 笔记本检查点
 .ipynb_checkpoints/
 
 # 包管理文件（根据使用工具）
-Pipfile.lock    # pipenv
-poetry.lock     # poetry
-requirements.txt # 传统 requirements
+Pipfile.lock   
+poetry.lock   
+requirements.txt
