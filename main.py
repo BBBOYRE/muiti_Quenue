@@ -16,11 +16,11 @@ if __name__ == '__main__':
 
 
     #使用FunctionKEy
-    rq1 = ReadyQue(algo=FunctionKey, priority=0, time_clip=2)  # 最高优先级，最短时间片
-    rq2 = ReadyQue(algo=FunctionKey, priority=1, time_clip=4)  # 中等优先级，中等时间片
-    rq3 = ReadyQue(algo=FunctionKey, priority=2, time_clip=8)  # 最低优先级，最长时间片
-    rq4 = ReadyQue(algo=FunctionKey, priority=3, time_clip=16)
-    rq5 = ReadyQue(algo=FunctionKey, priority=4, time_clip=32)
+    rq1 = ReadyQue(algo='FIFO', priority=0, time_clip=2)  # 最高优先级，最短时间片
+    rq2 = ReadyQue(algo='FIFO', priority=1, time_clip=4)  # 中等优先级，中等时间片
+    rq3 = ReadyQue(algo='FIFO', priority=2, time_clip=8)  # 最低优先级，最长时间片
+    rq4 = ReadyQue(algo='FIFO', priority=3, time_clip=16)
+    rq5 = ReadyQue(algo='FIFO', priority=4, time_clip=32)
 
     rq_list = [rq1, rq2, rq3, rq4, rq5]
 
