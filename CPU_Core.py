@@ -229,12 +229,20 @@ class CPU_Core:
 
     def _demote_process(self, process):
         """将进程降级到下一优先级队列，如果已经在最低优先级，则重新放回最高优先级"""
+
+        from CPU_Core import CPU_core_clock  #导入CPU时钟，用于更新进程进入队列的时间
+
+
+
+
         current_que_id = process.get_que_id()
         if current_que_id == len(self._que_list) - 1:
             # 如果在最低优先级队列，则重新放回最高优先级队列
             next_que_id = 0
         else:
             next_que_id = current_que_id + 1
+        
+        process.set_time_in_quenue(CPU_core_clock)
         process._que_id = next_que_id
         self._que_list[next_que_id].offer(process)
 
@@ -286,6 +294,8 @@ class CPU_Core:
         if CPU_core_clock in self.io_completion_times:
             process = self.io_completion_times[CPU_core_clock]
             print(f"IO completed for process {process.get_name()}")
+
+            process.set_time_in_quenue(CPU_core_clock)
 
             # 将进程放回原来的队列
             original_que_id = process.get_que_id()

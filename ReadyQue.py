@@ -43,13 +43,17 @@ class ReadyQue:
         self._pcb_heap = _PCBHeap()
         self._que_tot_time = 0
 
+    def is_empty(self) -> bool:
+        """检查队列是否为空"""
+        return len(self._pcb_heap) == 0
+
     # 将进程转换为pcb, 实际上是根据_algorithm变量打包一个优先级,相当于在原先的进程数据中添加一个优先级标识
     def _process2pcb(self, process: Process) -> _PCB:
         # 优先级越小, 越靠前, 这样heap时候就统一用小根堆了
         def get_priority(p: Process) -> float:
             if self._algorithm == 'FIFO':
                 # 越早到达越优先
-                return p.time_get_rest()
+                return p._time_in_quenue
             elif self._algorithm == 'SJF':
                 # 剩余时间越少越优先
                 return p.time_get_rest()
@@ -65,6 +69,11 @@ class ReadyQue:
 
     # 向就绪队列中加入一个新的进程
     def offer(self, process: Process):
+
+        from CPU_Core import CPU_core_clock #导入CPU时钟
+
+        process.set_time_in_quenue(CPU_core_clock)
+
         pcb = self._process2pcb(process)
         self._pcb_heap.push(pcb)
         self._que_tot_time += process.time_get_rest()
