@@ -6,7 +6,7 @@ from typing import List
 from typing import Union
 import random
 from prettytable import PrettyTable
-
+from shuffle_utils import infinite_shuffled_reproducible
 # CPU时钟，当开始模拟那一刻开始计时
 CPU_core_clock = 0
 
@@ -27,7 +27,10 @@ class CPU_Core:
         self.completed_processes = []  # 用于存储已完成的进程           当进程dead后，将会进入该数组
         self.io_interrupts = []  # 存储IO中断信息
         self.io_completion_times = {}  # 存储IO完成时间             若有当前CPU_Core io_completion_times, 则说明有IO complete
-
+        iocreator = infinite_shuffled_reproducible(0, 1, 0.01, seed=42)
+        self._io_creator = iocreator
+        iotimegen = infinite_shuffled_reproducible(3, 8, 1, seed=99)
+        self._io_time_gen = iotimegen
     # if que 有问题
     #在 run_for_1clk中被调用
     def _get_next_process(self) -> Union[Process, int]:
@@ -250,14 +253,14 @@ class CPU_Core:
         if (self._process_on_core and
                 self._process_on_core.get_name() != 'HANGING' and
                 "Interrupt" not in self._process_on_core.get_name() and
-                random.random() < 0.1):
+                next(self._io_creator) < 0.10):
 
             # 检查等待队列是否已满（只能有一个进程）
             if self._waiting_process is not None:
                 print("Waiting queue is full, cannot add IO request")
                 return
 
-            io_time = random.randint(3, 8)
+            io_time = next(self._io_time_gen)
             self.io_interrupts.append({
                 'process': self._process_on_core,
                 'start_time': CPU_core_clock,
