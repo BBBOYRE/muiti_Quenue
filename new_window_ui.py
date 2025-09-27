@@ -262,33 +262,33 @@ class MainWindow(tk.Tk):
 
     def create_status_panel(self, parent):
         """创建右侧状态面板"""
-        # 面板标题
+            # 面板标题
         ttk.Label(parent,
-                  text="系统状态",
-                  font=('Arial', 12, 'bold'),  # 减小字体大小
-                  foreground=self.dark_text).pack(pady=(0, 12))  # 减小垂直间距
+                text="系统状态",
+                font=('Arial', 12, 'bold'),
+                foreground=self.dark_text).pack(pady=(0, 12))
 
         # CPU状态区域
         cpu_frame = ttk.Frame(parent, style='Card.TFrame')
-        cpu_frame.pack(fill=tk.X, pady=4)  # 减小垂直间距
+        cpu_frame.pack(fill=tk.X, pady=4)
 
         ttk.Label(cpu_frame,
-                  text="CPU状态",
-                  font=('Arial', 10, 'bold')).pack(pady=4)  # 减小字体大小和垂直间距
+                text="CPU状态",
+                font=('Arial', 10, 'bold')).pack(pady=4)
 
         self.cpu_status_label = ttk.Label(cpu_frame,
-                                          text="空闲",
-                                          font=('Arial', 9),  # 减小字体大小
-                                          foreground=self.accent_color)
-        self.cpu_status_label.pack(pady=(0, 8))  # 减小垂直间距
+                                        text="空闲",
+                                        font=('Arial', 9),
+                                        foreground=self.accent_color)
+        self.cpu_status_label.pack(pady=(0, 8))
 
         # 等待队列区域
         waitq_frame = ttk.Frame(parent, style='Card.TFrame')
-        waitq_frame.pack(fill=tk.X, pady=4)  # 减小垂直间距
+        waitq_frame.pack(fill=tk.X, pady=4)
 
         ttk.Label(waitq_frame,
-                  text="等待队列",
-                  font=('Arial', 10, 'bold')).pack(pady=4)  # 减小字体大小和垂直间距
+                text="等待队列",
+                font=('Arial', 10, 'bold')).pack(pady=4)
 
         # 使用Canvas和Frame实现可滚动区域 - 减小高度
         waitq_canvas = tk.Canvas(waitq_frame, height=80, bg='white', highlightthickness=0)  # 减小高度
@@ -314,44 +314,49 @@ class MainWindow(tk.Tk):
         waitq_canvas.pack(side="left", fill="both", expand=True, padx=4, pady=4)  # 减小内边距
         waitq_scrollbar.pack(side="right", fill="y", pady=4)  # 减小内边距
 
-        # IO事件区域
+            # IO事件区域
         io_frame = ttk.Frame(parent, style='Card.TFrame')
-        io_frame.pack(fill=tk.X, pady=4)  # 减小垂直间距
+        io_frame.pack(fill=tk.X, pady=4)
 
         ttk.Label(io_frame,
-                  text="IO事件",
-                  font=('Arial', 10, 'bold')).pack(pady=4)  # 减小字体大小和垂直间距
+                text="IO事件",
+                font=('Arial', 10, 'bold')).pack(pady=4)
 
         self.io_label = ttk.Label(io_frame,
-                                  text="无事件",
-                                  font=('Arial', 9),  # 减小字体大小
-                                  wraplength=230)  # 减小换行宽度
-        self.io_label.pack(pady=(0, 8), padx=8)  # 减小内边距
+                                text="无事件",
+                                font=('Arial', 9),
+                                wraplength=230)
+        self.io_label.pack(pady=(0, 8), padx=8)
 
-        # 系统信息区域
+        # 系统信息区域 - 更新标签列表
         info_frame = ttk.Frame(parent, style='Card.TFrame')
-        info_frame.pack(fill=tk.X, pady=4)  # 减小垂直间距
+        info_frame.pack(fill=tk.X, pady=4)
 
         ttk.Label(info_frame,
-                  text="系统信息",
-                  font=('Arial', 10, 'bold')).pack(pady=4)  # 减小字体大小和垂直间距
+                text="系统信息",
+                font=('Arial', 10, 'bold')).pack(pady=4)
 
-        # 添加系统信息标签
+        # 更新信息标签，添加新的性能指标
         info_labels = [
             ("已完成进程:", "0"),
             ("总进程数:", "0"),
             ("平均周转时间:", "0"),
+            ("平均等待时间:", "0"),  # 新增
+            ("平均带权周转时间:", "0"),  # 新增
+            ("CPU利用率:", "0%"),  # 新增
+            ("CPU总运行时间:", "0"),  # 新增
+            ("总服务时间:", "0")  # 新增
         ]
 
         self.info_vars = {}
 
         for text, default in info_labels:
             row = ttk.Frame(info_frame)
-            row.pack(fill=tk.X, padx=8, pady=2)  # 减小内边距
+            row.pack(fill=tk.X, padx=8, pady=2)
 
-            ttk.Label(row, text=text, font=('Arial', 9)).pack(side=tk.LEFT)  # 减小字体大小
+            ttk.Label(row, text=text, font=('Arial', 9)).pack(side=tk.LEFT)
             var = tk.StringVar(value=default)
-            ttk.Label(row, textvariable=var, font=('Arial', 9)).pack(side=tk.RIGHT)  # 减小字体大小
+            ttk.Label(row, textvariable=var, font=('Arial', 9)).pack(side=tk.RIGHT)
             self.info_vars[text] = var
 
     def create_button_area(self):
@@ -600,22 +605,22 @@ class MainWindow(tk.Tk):
 
         io_text = "\n".join(io_events) if io_events else "无事件"
         self.io_label.config(text=io_text)
-
+        # 获取性能指标
+        metrics = self.cpu_core.get_performance_metrics()
         # 更新系统信息
-        completed = len(self.cpu_core.completed_processes)
+        completed = metrics['completed_count']
         total = completed + sum(len(q.get_que_list()) for q in self.rq_list)
 
         self.info_vars["已完成进程:"].set(str(completed))
         self.info_vars["总进程数:"].set(str(total))
-
-        # 计算平均周转时间
-        if completed > 0:
-            total_turnaround = sum(
-                (self.cpu_core.get_cpu_clock() - p['arrive_time']) for p in self.cpu_core.completed_processes)
-            avg_turnaround = total_turnaround / completed
-            self.info_vars["平均周转时间:"].set(f"{avg_turnaround:.2f}")
-        else:
-            self.info_vars["平均周转时间:"].set("0.00")
+        
+        # 更新新的性能指标
+        self.info_vars["平均周转时间:"].set(f"{metrics['avg_turnaround_time']:.2f}")
+        self.info_vars["平均等待时间:"].set(f"{metrics['avg_waiting_time']:.2f}")
+        self.info_vars["平均带权周转时间:"].set(f"{metrics['avg_weighted_turnaround_time']:.2f}")
+        self.info_vars["CPU利用率:"].set(f"{metrics['cpu_utilization']:.2f}%")
+        self.info_vars["CPU总运行时间:"].set(str(metrics['cpu_total_time']))
+        self.info_vars["总服务时间:"].set(str(metrics['total_service_time']))
 
     def create_process_card(self, parent, item, color):
         """创建进程显示卡片 - 减小尺寸"""
