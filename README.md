@@ -1,3 +1,4 @@
+这里是徐占国，增加了新指标，完成了任务3、6，对ui有所修改
 1.	新增多种算法进行对比
 2.	新增初始UI，可选择算法进行运行
 3.	每个算法运行完后会将数据转换为txt文件（尝试将txt文件转为图）
@@ -9,4 +10,5 @@
     同时FunctionSelector也会将修改ReadyQue中的参数 AlgorithmSelector（等同于main中的FunctionKey避免循环导入）用于进行队列维护选择
 2.在mainWindow中添加一个返回按钮，使得程序返回FunctionSelector进行算法选择
 3.在ReadyQue中应该返回小根堆模式并恢复PCB块，通过区分self.algorithm来区分如何计算优先级
+
 
