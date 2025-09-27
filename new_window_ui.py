@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 import random
 import string
+import os
 from Process import Process
 from ReadyQue import ReadyQue
 
@@ -417,6 +418,16 @@ class MainWindow(tk.Tk):
                    text='配置队列',
                    command=self.config_queues,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=4)  # 减小内边距
+        
+        # 第三行按钮 - 新增系统信息保存按钮
+        row3 = ttk.Frame(button_frame)
+        row3.pack(pady=4)
+
+        # 保存系统信息按钮
+        ttk.Button(row3,
+                text='保存系统信息',
+                command=self.save_system_info,
+                style='Accent.TButton').pack(side=tk.LEFT, padx=4)
 
     def add_process_dialog(self):
         # 创建一个顶层对话框窗口
@@ -778,3 +789,11 @@ class MainWindow(tk.Tk):
         if widget and isinstance(widget, tk.Canvas):
             # 滚动该画布
             widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def save_system_info(self):
+        """保存当前系统信息到固定文件 System_information.txt"""
+        saved_file = self.cpu_core.save_system_info_to_file()
+        if saved_file:
+            messagebox.showinfo("保存成功", f"系统信息已保存到:\n{os.path.abspath(saved_file)}")
+        else:
+            messagebox.showerror("保存失败", "系统信息保存失败")
