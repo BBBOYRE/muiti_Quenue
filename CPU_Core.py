@@ -351,3 +351,85 @@ class CPU_Core:
             'total_service_time': CPU_busy_time,  # 使用全局CPU_busy_time
             'completed_count': completed_count
         }
+    
+        # 在CPU_Core类中添加以下方法
+    def save_system_info_to_file(self):
+        """将当前系统信息保存到文件"""
+        filename = "System_information.txt"
+        try:
+            metrics = self.get_performance_metrics()
+            completed = metrics['completed_count']
+            total = completed + sum(len(q.get_que_list()) for q in self._que_list)
+            
+            with open(filename, 'a', encoding='utf-8') as f:
+                f.write("=" * 50 + "\n")
+                f.write(f"系统信息快照 (时钟周期: {CPU_core_clock})\n")
+                f.write("=" * 50 + "\n\n")
+                
+                f.write("性能指标:\n")
+                f.write("-" * 30 + "\n")
+                f.write(f"已完成进程数: {completed}\n")
+                f.write(f"总进程数: {total}\n")
+                f.write(f"平均周转时间: {metrics['avg_turnaround_time']:.2f}\n")
+                f.write(f"平均等待时间: {metrics['avg_waiting_time']:.2f}\n")
+                f.write(f"平均带权周转时间: {metrics['avg_weighted_turnaround_time']:.2f}\n")
+                f.write(f"CPU利用率: {metrics['cpu_utilization']:.2f}%\n")
+                f.write(f"CPU总运行时间: {metrics['cpu_total_time']}\n")
+                f.write(f"总服务时间: {metrics['total_service_time']}\n\n")
+                
+                f.write("就绪队列状态:\n")
+                f.write("-" * 30 + "\n")
+                for i, que in enumerate(self._que_list):
+                    que_list = que.get_que_list()
+                    f.write(f"队列 {i+1}: {len(que_list)} 个进程\n")
+                    for j, process in enumerate(que_list):
+                        f.write(f"  进程 {j+1}: {process[0]} (到达: {process[1]}, 剩余: {process[2]})\n")
+                    f.write("\n")
+                
+                f.write("当前运行进程:\n")
+                f.write("-" * 30 + "\n")
+                if self._process_on_core:
+                    f.write(f"进程名: {self._process_on_core.get_name()}\n")
+                    f.write(f"到达时间: {self._process_on_core.time_get_arrive()}\n")
+                    f.write(f"剩余时间: {self._process_on_core.time_get_rest()}\n")
+                    f.write(f"队列ID: {self._process_on_core.get_que_id()}\n")
+                else:
+                    f.write("无进程运行\n")
+                f.write("\n")
+                
+                f.write("等待队列:\n")
+                f.write("-" * 30 + "\n")
+                if self._waiting_process:
+                    f.write(f"进程名: {self._waiting_process.get_name()}\n")
+                    f.write(f"到达时间: {self._waiting_process.time_get_arrive()}\n")
+                    f.write(f"剩余时间: {self._waiting_process.time_get_rest()}\n")
+                    f.write(f"队列ID: {self._waiting_process.get_que_id()}\n")
+                else:
+                    f.write("等待队列为空\n")
+                f.write("\n")
+                
+                f.write("IO事件:\n")
+                f.write("-" * 30 + "\n")
+                if self.io_completion_times:
+                    for comp_time, process in self.io_completion_times.items():
+                        f.write(f"{process.get_name()}: 将在时钟 {comp_time} 完成IO\n")
+                else:
+                    f.write("无IO事件\n")
+                f.write("\n")
+                
+                f.write("已完成进程列表:\n")
+                f.write("-" * 30 + "\n")
+                if self.completed_processes:
+                    for i, proc in enumerate(self.completed_processes):
+                        f.write(f"{i+1}. {proc['name']} (PID: {proc['pid']})\n")
+                        f.write(f"   到达时间: {proc['arrive_time']}, 总时间: {proc['tot_time']}\n")
+                        f.write(f"   周转时间: {proc['turnaround_time']}, 等待时间: {proc['waiting_time']}\n")
+                        f.write(f"   带权周转时间: {proc['weighted_turnaround_time']:.2f}\n")
+                else:
+                    f.write("暂无已完成进程\n")
+            
+            print(f"系统信息已保存到: {filename}")
+            return filename
+        except Exception as e:
+            print(f"保存系统信息失败: {e}")
+            return None
