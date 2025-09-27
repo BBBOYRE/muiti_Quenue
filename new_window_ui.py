@@ -1,3 +1,8 @@
+xzg新增修改：
+793-799
+619-634
+422-430
+332-350
 # 修改后的文档3: MainWindow.py - 新UI设计
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
