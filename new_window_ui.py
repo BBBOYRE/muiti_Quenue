@@ -5,10 +5,11 @@ import random
 import string
 from Process import Process
 from ReadyQue import ReadyQue
-
+import sys
+import os
 
 class MainWindow(tk.Tk):
-    def __init__(self, ls1, ls2, cpu_core, process_generator, rq_list):
+    def __init__(self, ls1, ls2, cpu_core, process_generator, rq_list, function_key='FIFO'):
         """
         初始化主窗口
         """
@@ -19,14 +20,18 @@ class MainWindow(tk.Tk):
         self.cpu_core = cpu_core
         self.process_generator = process_generator
         self.rq_list = rq_list
+        self.function_key = function_key  # 存储选择的算法
         self.auto_gen = True
         self.user_require_interrupt = False
         self.current_scroll_area = None  # 绑定鼠标滚轮
 
         # 设置窗口标题和大小
-        self.title("操作系统课设 - 多级反馈队列调度模拟")
-        self.geometry("1200x800")  # 减小窗口高度
+        self.title(f"操作系统课设 - 多级反馈队列调度模拟 [{function_key}算法]")
+        #self.geometry("1200x800")  # 减小窗口高度
         self.configure(bg="#f8f9fa")  # 设置浅灰色背景
+
+        # 添加窗口自适应设置
+        self.setup_window_adaptation()
 
         # 初始化存储区域列表
         self.areas = []
@@ -63,6 +68,50 @@ class MainWindow(tk.Tk):
 
         # 绑定全局鼠标滚轮事件（添加）
         self.bind_all("<MouseWheel>", self.bind_global_mousewheel)
+        
+        # 绑定窗口关闭事件
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def setup_window_adaptation(self):
+        """设置窗口自适应屏幕"""
+        # 获取屏幕尺寸
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        
+        # 设置窗口初始大小为屏幕的80%
+        initial_width = int(screen_width * 0.8)
+        initial_height = int(screen_height * 0.8)
+        
+        # 计算居中位置
+        x = (screen_width - initial_width) // 2
+        y = (screen_height - initial_height) // 2
+        
+        # 设置窗口初始位置和大小
+        self.geometry(f"{initial_width}x{initial_height}+{x}+{y}")
+        
+        # 设置最小窗口大小
+        self.minsize(1000, 600)
+        
+        # 允许窗口最大化
+        self.state('zoomed')  # 确保窗口状态正常
+        
+        # 添加窗口大小变化事件绑定
+        self.bind('<Configure>', self._on_window_configure)
+
+        # 更新窗口以确保所有部件正确渲染
+        self.update_idletasks()
+
+    def _on_window_configure(self, event):
+        """窗口大小变化时的回调函数"""
+        # 只有当事件是主窗口时才处理
+        if event.widget == self:
+            # 更新画布和滚动区域
+            self._update_scroll_region()
+
+    def _update_scroll_region(self):
+        """更新滚动区域"""
+        if hasattr(self, 'main_canvas'):
+            self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
 
     def setup_styles(self):
         """设置自定义样式"""
@@ -125,6 +174,13 @@ class MainWindow(tk.Tk):
         self.main_frame = ttk.Frame(self.main_canvas, padding=10)
         self.main_window = self.main_canvas.create_window((0, 0), window=self.main_frame, anchor="nw")
 
+        # 修复：确保主框架宽度随画布调整
+        def configure_main_window(event):
+            # 更新主框架宽度以匹配画布
+            self.main_canvas.itemconfig(self.main_window, width=event.width)
+            # 更新滚动区域
+            self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+
         self.main_frame.bind("<Configure>", self._on_main_frame_configure)
         self.main_canvas.bind("<Configure>", self._on_main_canvas_configure)
 
@@ -134,7 +190,7 @@ class MainWindow(tk.Tk):
         header_frame.pack(fill=tk.X, pady=(0, 10))  # 减小垂直间距
 
         title_label = ttk.Label(header_frame,
-                                text="多级反馈队列调度模拟系统",
+                                text=f"多级反馈队列调度模拟系统 [{self.function_key}算法]",
                                 style='Header.TLabel')
         title_label.pack(pady=8)  # 减小垂直间距
 
@@ -151,6 +207,20 @@ class MainWindow(tk.Tk):
                                          font=('Arial', 10, 'bold'),  # 减小字体大小
                                          foreground=self.primary_color)
         self.cpu_clock_label.pack(side=tk.LEFT, padx=4)  # 减小内边距
+
+        # 算法显示
+        algo_frame = ttk.Frame(header_frame, style='Card.TFrame')
+        algo_frame.pack(side=tk.LEFT, padx=8, pady=4)  # 减小内边距
+
+        ttk.Label(algo_frame,
+                  text="当前算法:",
+                  font=('Arial', 9, 'bold')).pack(side=tk.LEFT, padx=4)  # 减小字体大小和内边距
+
+        self.algo_label = ttk.Label(algo_frame,
+                                    text=self.function_key,
+                                    font=('Arial', 10, 'bold'),  # 减小字体大小
+                                    foreground=self.accent_color)
+        self.algo_label.pack(side=tk.LEFT, padx=4)  # 减小内边距
 
         # 状态指示器
         status_frame = ttk.Frame(header_frame, style='Card.TFrame')
@@ -235,7 +305,7 @@ class MainWindow(tk.Tk):
         # 使用Canvas和Frame实现可滚动区域
         canvas = tk.Canvas(content_frame, bg='white', highlightthickness=0, height=80)  # 减小高度
         scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=canvas.yview)
-        # 修改为tk.Frame并设置背景色为白色
+        # 设置背景色为白色
         scrollable_frame = tk.Frame(canvas, bg='white')
 
         scrollable_frame.bind(
@@ -258,7 +328,7 @@ class MainWindow(tk.Tk):
         scrollbar.pack(side="right", fill="y")
 
         # 存储区域引用
-        self.areas.append((scrollable_frame, count_label, canvas))  # 修改这行，添加canvas引用
+        self.areas.append((scrollable_frame, count_label, canvas))  # 添加canvas引用
 
     def create_status_panel(self, parent):
         """创建右侧状态面板"""
@@ -293,7 +363,7 @@ class MainWindow(tk.Tk):
         # 使用Canvas和Frame实现可滚动区域 - 减小高度
         waitq_canvas = tk.Canvas(waitq_frame, height=80, bg='white', highlightthickness=0)  # 减小高度
         waitq_scrollbar = ttk.Scrollbar(waitq_frame, orient="vertical", command=waitq_canvas.yview)
-        # 修改为tk.Frame并设置背景色为白色
+        # 设置背景色为白色
         self.waitq_frame = tk.Frame(waitq_canvas, bg='white')
 
         self.waitq_frame.bind(
@@ -341,6 +411,11 @@ class MainWindow(tk.Tk):
             ("已完成进程:", "0"),
             ("总进程数:", "0"),
             ("平均周转时间:", "0"),
+            ("平均等待时间:", "0"),  # 新增
+            ("平均带权周转时间:", "0"),  # 新增
+            ("CPU利用率:", "0%"),  # 新增
+            ("CPU总运行时间:", "0"),  # 新增
+            ("总服务时间:", "0")  # 新增
         ]
 
         self.info_vars = {}
@@ -412,6 +487,22 @@ class MainWindow(tk.Tk):
                    text='配置队列',
                    command=self.config_queues,
                    style='Secondary.TButton').pack(side=tk.LEFT, padx=4)  # 减小内边距
+
+        # 第三行按钮 - 新增返回按钮
+        row3 = ttk.Frame(button_frame)
+        row3.pack(pady=4)  # 减小垂直间距
+
+        # 返回算法选择按钮
+        ttk.Button(row3,
+                   text='返回算法选择',
+                   command=self.return_to_selector,
+                   style='Danger.TButton').pack(side=tk.LEFT, padx=4)  # 减小内边距
+        
+        # 保存系统信息按钮
+        ttk.Button(row3,
+                    text='保存系统信息',
+                    command=self.save_system_info,
+                    style='Accent.TButton').pack(side=tk.LEFT, padx=4)
 
     def add_process_dialog(self):
         # 创建一个顶层对话框窗口
@@ -601,21 +692,25 @@ class MainWindow(tk.Tk):
         io_text = "\n".join(io_events) if io_events else "无事件"
         self.io_label.config(text=io_text)
 
+        # 获取性能指标
+        metrics = self.cpu_core.get_performance_metrics()
+
         # 更新系统信息
-        completed = len(self.cpu_core.completed_processes)
+        completed = metrics['completed_count']
+        #completed = len(self.cpu_core.completed_processes)
         total = completed + sum(len(q.get_que_list()) for q in self.rq_list)
 
         self.info_vars["已完成进程:"].set(str(completed))
         self.info_vars["总进程数:"].set(str(total))
 
-        # 计算平均周转时间
-        if completed > 0:
-            total_turnaround = sum(
-                (self.cpu_core.get_cpu_clock() - p['arrive_time']) for p in self.cpu_core.completed_processes)
-            avg_turnaround = total_turnaround / completed
-            self.info_vars["平均周转时间:"].set(f"{avg_turnaround:.2f}")
-        else:
-            self.info_vars["平均周转时间:"].set("0.00")
+        # 更新新的性能指标
+        self.info_vars["平均周转时间:"].set(f"{metrics['avg_turnaround_time']:.2f}")
+        self.info_vars["平均等待时间:"].set(f"{metrics['avg_waiting_time']:.2f}")
+        self.info_vars["平均带权周转时间:"].set(f"{metrics['avg_weighted_turnaround_time']:.2f}")
+        self.info_vars["CPU利用率:"].set(f"{metrics['cpu_utilization']:.2f}%")
+        self.info_vars["CPU总运行时间:"].set(str(metrics['cpu_total_time']))
+        self.info_vars["总服务时间:"].set(str(metrics['total_service_time']))
+        #以上是增加部分
 
     def create_process_card(self, parent, item, color):
         """创建进程显示卡片 - 减小尺寸"""
@@ -732,7 +827,7 @@ class MainWindow(tk.Tk):
                 for i in range(num_queues):
                     priority = int(priority_vars[i].get())
                     time_clip = int(time_clip_vars[i].get())
-                    new_rq_list.append(ReadyQue(algo='FIFO', priority=priority, time_clip=time_clip))
+                    new_rq_list.append(ReadyQue(algo=self.function_key, priority=priority, time_clip=time_clip))
 
                 # 更新队列列表
                 self.rq_list = new_rq_list
@@ -755,6 +850,44 @@ class MainWindow(tk.Tk):
 
         ttk.Button(config_window, text="应用", command=apply_config).grid(row=6, column=0, columnspan=2, pady=10)
 
+    def return_to_selector(self):
+        """返回算法选择器"""
+        if messagebox.askyesno("确认", "确定要返回算法选择界面吗？当前模拟进度将丢失。"):
+            # 停止自动刷新
+            if self.auto_refresh:
+                self.toggle_auto_refresh()
+            
+            # 销毁当前窗口
+            self.destroy()
+            
+            # 重新启动程序（返回到算法选择）
+        try:
+            # 使用更安全的方式重启程序
+            import subprocess
+            subprocess.Popen([sys.executable] + sys.argv)
+        except Exception as e:
+            print(f"重启程序失败: {e}")
+            # 如果子进程方式失败，尝试其他方式
+            try:
+                # 尝试直接使用当前Python解释器
+                python_exe = sys.executable
+                if python_exe and os.path.exists(python_exe):
+                    os.execl(python_exe, python_exe, *sys.argv)
+                else:
+                    # 如果找不到Python解释器，提示用户手动重启
+                    messagebox.showinfo("提示", "程序重启失败，请手动重新运行程序。")
+            except Exception as e2:
+                print(f"备用重启方式也失败: {e2}")
+                messagebox.showinfo("提示", "程序重启失败，请手动重新运行程序。")
+
+    def on_closing(self):
+        """窗口关闭事件处理"""
+        if messagebox.askokcancel("退出", "确定要退出程序吗？"):
+            # 停止自动刷新
+            if self.auto_refresh:
+                self.toggle_auto_refresh()
+            self.destroy()
+    
     def _on_main_frame_configure(self, event):
         """更新主画布的滚动区域"""
         self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
@@ -773,3 +906,96 @@ class MainWindow(tk.Tk):
         if widget and isinstance(widget, tk.Canvas):
             # 滚动该画布
             widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    
+    def save_system_info(self):
+        """保存当前系统信息到固定文件 System_information.txt"""
+        saved_file = self.cpu_core.save_system_info_to_file()
+        if saved_file:
+            messagebox.showinfo("保存成功", f"系统信息已保存到:\n{os.path.abspath(saved_file)}")
+        else:
+            messagebox.showerror("保存失败", "系统信息保存失败")
+
+class FunctionSelector:
+    """统一的算法选择器，负责UI交互和全局算法状态管理"""
+    current_algorithm = 'FIFO'  # 默认算法
+    
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("算法选择器")
+        self.root.geometry("400x350")
+        self.root.configure(bg="#f0f0f0")
+        self.root.eval('tk::PlaceWindow . center')
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.user_closed = False
+        self.create_widgets()
+    
+    @classmethod
+    def set_algorithm(cls, algorithm):
+        """设置当前算法"""
+        if algorithm in ['FIFO', 'SJF', 'HRRN']:
+            cls.current_algorithm = algorithm
+            print(f"算法已设置为 {algorithm}")
+        else:
+            print(f"不支持的算法 {algorithm}，使用默认FIFO")
+            cls.current_algorithm = 'FIFO'
+    
+    @classmethod
+    def get_algorithm(cls):
+        """获取当前算法"""
+        return cls.current_algorithm
+    
+    def create_widgets(self):
+        """创建UI组件"""
+        # 标题
+        title_label = ttk.Label(self.root, text="请选择调度算法", 
+                               font=('Arial', 16, 'bold'),
+                               background="#f0f0f0")
+        title_label.pack(pady=20)
+        
+        # 算法说明
+        desc_text = """算法说明：
+- FIFO: 先来先服务算法
+- SJF: 最短作业优先算法  
+- HRRN: 最高响应比优先算法"""
+        
+        desc_label = ttk.Label(self.root, text=desc_text,
+                              font=('Arial', 10),
+                              background="#f0f0f0",
+                              justify=tk.LEFT)
+        desc_label.pack(pady=10)
+        
+        # 算法选择按钮框架
+        button_frame = ttk.Frame(self.root)
+        button_frame.pack(pady=20)
+        
+        # 算法选择按钮
+        algorithms = [('FIFO算法', 'FIFO'), 
+                     ('SJF算法', 'SJF'), 
+                     ('HRRN算法', 'HRRN')]
+        
+        for text, algo in algorithms:
+            btn = ttk.Button(button_frame, text=text,
+                           command=lambda a=algo: self.select_algorithm(a),
+                           width=15)
+            btn.pack(pady=5)
+    
+    def select_algorithm(self, algorithm):
+        """选择算法并关闭窗口"""
+        self.set_algorithm(algorithm)
+        print(f"已选择算法: {algorithm}")
+        self.root.quit()
+        self.root.destroy()
+    
+    def on_closing(self):
+        """窗口关闭事件处理"""
+        if messagebox.askokcancel("退出", "确定要退出程序吗？"):
+            self.user_closed = True
+            self.root.quit()
+            self.root.destroy()
+
+    def get_selection(self):
+        """启动选择器并返回选择的算法"""
+        self.root.mainloop()
+        if self.user_closed:
+            return None
+        return self.current_algorithm

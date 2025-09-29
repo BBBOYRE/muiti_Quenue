@@ -9,7 +9,7 @@ from prettytable import PrettyTable
 
 # CPU时钟，当开始模拟那一刻开始计时
 CPU_core_clock = 0
-
+CPU_busy_time = 0  # CPU繁忙时间
 
 class CPU_Core:
     def __init__(self, que_list: List[ReadyQue]) -> None:
@@ -27,7 +27,12 @@ class CPU_Core:
         self.completed_processes = []  # 用于存储已完成的进程           当进程dead后，将会进入该数组
         self.io_interrupts = []  # 存储IO中断信息
         self.io_completion_times = {}  # 存储IO完成时间             若有当前CPU_Core io_completion_times, 则说明有IO complete
-
+         # 新增的统计指标
+        self.total_waiting_time = 0  # 总等待时间
+        self.total_turnaround_time = 0  # 总周转时间
+        self.total_service_time = 0  # 总服务时间
+        self.total_weighted_turnaround_time = 0  # 总带权周转时间
+        self.cpu_total_time = 0  # CPU总运行时间
     # if que 有问题
     #在 run_for_1clk中被调用
     def _get_next_process(self) -> Union[Process, int]:
@@ -46,34 +51,21 @@ class CPU_Core:
 
 
 
-    # this is the central function of class CPU_Core, it describes the trunk road of CPU_Core's activity
     def run_for_1clk(self) -> None:
-        """
-        每个时钟都要做这些事:
-        - 时钟加1
-        - 维护队列内所有任务的信息
-        - 检查当前任务, 如果做完了, 丢弃掉
-            - 如果这个任务是中断, 唤醒等待队列头, 开中断
-        - 如果当前有中断, 且开中断
-            - 发生抢占, 现在跑的任务(如果有)拿到waiting_list
-            - 中断上CPU
-            - 关中断
-        - 否则在等待队列里取出一个任务
-        - 当前的任务跑一个时钟
-        - 打印这个时钟的报告信息
-        """
-
-        #时钟递增
         global CPU_core_clock
+        global CPU_busy_time
+        
+        # 先记录当前是否有用户进程在运行（用于统计繁忙时间）
+        has_user_process_before = (self._process_on_core and 
+                                self._process_on_core.get_name() != 'HANGING' and 
+                                "Interrupt" not in self._process_on_core.get_name())
+        
+        # 时钟递增
         CPU_core_clock += 1
-
+        self.cpu_total_time += 1
+        
         # 检查IO完成事件
         self._check_io_completion()
-        """
-        检查io_completion_times字典中受否有在当前时钟完成的IO操作
-        如果有，将对应的进程从等待队列移回就绪队列
-        更新中断允许状态
-        """
 
         # 维护所有队列
         for que in self._que_list:
@@ -83,13 +75,14 @@ class CPU_Core:
             # 如果当前安排的时间耗尽
             if self._process_on_core and "Interrupt" in self._process_on_core.get_name():
                 # 如果做完的任务是中断, 唤醒, 开中断
-                if not self.jam_waiting_list:#根据jam_waiting_list标志决定是否唤醒等待队列中的进程，但是由于删除了该功能，所以相当于没有判断
-                    self._awake_waiting_list()#将等待队列中的进程放回原队列
+                if not self.jam_waiting_list:
+                    self._awake_waiting_list()
                 self._open_4interrupt = True
+                
             # 如果做完了, 扔掉, 记录, 否则进等待队列
             if self._process_on_core:
                 if self._process_on_core.time_get_rest() <= 0:
-                    self._throw_away()#将已完成进程添加到完成列表
+                    self._throw_away()
                 elif self._process_on_core.get_name() != 'HANGING':
                     # 进程未完成，降级到下一优先级队列
                     self._demote_process(self._process_on_core)
@@ -98,21 +91,15 @@ class CPU_Core:
         if not self.jam_waiting_list:
             self._awake_waiting_list()
 
-        interrupt, scheduled_time = self._interrupt_happen()   #该项目其实已经被删除了，随机中断功能删除
+        interrupt, scheduled_time = self._interrupt_happen()
         if interrupt is not None and self._open_4interrupt:
             # 如果来了新中断, 且开中断, 就安排新中断
             self._scheduled_time = scheduled_time
             if self._process_on_core and self._process_on_core.get_name() != 'HANGING':
-                # 等待队列只能有一个进程，如果已有进程则不允许中断
                 if self._waiting_process is None:
                     self._waiting_process = self._process_on_core
-                    # 等待队列满时禁止中断
                     self._open_4interrupt = False
             self._process_on_core = interrupt
-
-
-
-
 
         # 检查是否有更高优先级的进程需要抢占
         if (self._process_on_core and
@@ -120,28 +107,34 @@ class CPU_Core:
                 "Interrupt" not in self._process_on_core.get_name()):
             current_que_id = self._process_on_core.get_que_id()
             if current_que_id > 0 and self._has_higher_priority_process(current_que_id):
-                # 抢占当前进程：将当前进程放回原队列
                 self._que_list[current_que_id].offer(self._process_on_core)
                 self._process_on_core = None
-                self._scheduled_time = 0  # 强制重新调度
+                self._scheduled_time = 0
 
         if not self._process_on_core:
             # 如果还没事做, 就问反馈队列要一个
             self._process_on_core, self._scheduled_time = self._get_next_process()
 
-        # 跑一个时钟
+        # 关键修改：在运行进程之前统计繁忙时间
+        # 判断当前是否有用户进程要运行（非空闲、非中断）
+        has_user_process_now = (self._process_on_core and 
+                            self._process_on_core.get_name() != 'HANGING' and 
+                            "Interrupt" not in self._process_on_core.get_name())
+        
+        # 如果有用户进程运行，增加繁忙时间
+        if has_user_process_now:
+            CPU_busy_time += 1
 
+        # 跑一个时钟
         self._scheduled_time -= 1
         if self._process_on_core:
             self._process_on_core.run_for_1clock()
             # 检查运行后进程是否完成
             if self._process_on_core.time_get_rest() <= 0:
-                # 如果做完了, 扔掉, 记录
                 self._throw_away()
-                # 强制时间片为0，以便下一个时钟周期获取新进程
                 self._scheduled_time = 0
 
-                # 随机生成IO请求
+        # 随机生成IO请求
         self._generate_io_events()
 
         self._brief()
@@ -165,17 +158,39 @@ class CPU_Core:
             self._waiting_process = None
             self._open_4interrupt = True
 
-    # 丢弃当前在CPU上的进程到统计列表
+        # 修改 _throw_away 方法，只将用户进程计入已完成进程
     def _throw_away(self):
         if self._process_on_core:
-            self.completed_processes.append({
-                'pid': self._process_on_core.get_pid(),
-                'name': self._process_on_core.get_name(),
-                'arrive_time': self._process_on_core.time_get_arrive(),
-                'tot_time': self._process_on_core.time_get_total(),
-                'run_time': self._process_on_core.time_get_run(),
-                'que_id': self._process_on_core.get_que_id()
-            })
+            process = self._process_on_core
+            
+            # 检查是否为用户进程（非中断、非闲逛进程）
+            is_user_process = (process.get_name() != 'HANGING' and 
+                            "Interrupt" not in process.get_name())
+            
+            if is_user_process:
+                # 计算进程的各项时间指标
+                turnaround_time = CPU_core_clock - process.time_get_arrive()  # 周转时间
+                waiting_time = turnaround_time - process.time_get_total()  # 等待时间
+                service_time = process.time_get_total()  # 服务时间
+                weighted_turnaround_time = turnaround_time / service_time  # 带权周转时间
+                
+                # 累加到总统计中
+                self.total_waiting_time += waiting_time
+                self.total_turnaround_time += turnaround_time
+                self.total_weighted_turnaround_time += weighted_turnaround_time
+                
+                self.completed_processes.append({
+                    'pid': process.get_pid(),
+                    'name': process.get_name(),
+                    'arrive_time': process.time_get_arrive(),
+                    'tot_time': service_time,
+                    'run_time': process.time_get_run(),
+                    'que_id': process.get_que_id(),
+                    'turnaround_time': turnaround_time,
+                    'waiting_time': waiting_time,
+                    'weighted_turnaround_time': weighted_turnaround_time
+                })
+        
         self._process_on_core = None
 
         # 返回None, None 或者[Process, int]
@@ -229,12 +244,20 @@ class CPU_Core:
 
     def _demote_process(self, process):
         """将进程降级到下一优先级队列，如果已经在最低优先级，则重新放回最高优先级"""
+
+        from CPU_Core import CPU_core_clock  #导入CPU时钟，用于更新进程进入队列的时间
+
+
+
+
         current_que_id = process.get_que_id()
         if current_que_id == len(self._que_list) - 1:
             # 如果在最低优先级队列，则重新放回最高优先级队列
             next_que_id = 0
         else:
             next_que_id = current_que_id + 1
+        
+        process.set_time_in_quenue(CPU_core_clock)
         process._que_id = next_que_id
         self._que_list[next_que_id].offer(process)
 
@@ -287,6 +310,8 @@ class CPU_Core:
             process = self.io_completion_times[CPU_core_clock]
             print(f"IO completed for process {process.get_name()}")
 
+            process.set_time_in_quenue(CPU_core_clock)
+
             # 将进程放回原来的队列
             original_que_id = process.get_que_id()
             if original_que_id < len(self._que_list):
@@ -300,3 +325,111 @@ class CPU_Core:
 
             # 移除已完成的IO事件
             del self.io_completion_times[CPU_core_clock]
+
+                # 添加获取新指标的方法
+    def get_performance_metrics(self):
+        """获取性能指标"""
+        completed_count = len(self.completed_processes)
+        
+        if completed_count > 0:
+            avg_waiting_time = self.total_waiting_time / completed_count
+            avg_turnaround_time = self.total_turnaround_time / completed_count
+            avg_weighted_turnaround_time = self.total_weighted_turnaround_time / completed_count
+        else:
+            avg_waiting_time = avg_turnaround_time = avg_weighted_turnaround_time = 0
+        
+        # 使用全局的CPU_busy_time而不是实例变量
+        global CPU_busy_time
+        cpu_utilization = (CPU_busy_time / self.cpu_total_time * 100) if self.cpu_total_time > 0 else 0
+        
+        return {
+            'avg_waiting_time': avg_waiting_time,
+            'avg_turnaround_time': avg_turnaround_time,
+            'avg_weighted_turnaround_time': avg_weighted_turnaround_time,
+            'cpu_utilization': cpu_utilization,
+            'cpu_total_time': self.cpu_total_time,
+            'total_service_time': CPU_busy_time,  # 使用全局CPU_busy_time
+            'completed_count': completed_count
+        }
+    
+        # 在CPU_Core类中添加以下方法
+    def save_system_info_to_file(self):
+        """将当前系统信息保存到文件"""
+        filename = "System_information.txt"
+        try:
+            metrics = self.get_performance_metrics()
+            completed = metrics['completed_count']
+            total = completed + sum(len(q.get_que_list()) for q in self._que_list)
+            
+            with open(filename, 'a', encoding='utf-8') as f:
+                f.write("=" * 50 + "\n")
+                f.write(f"系统信息快照 (时钟周期: {CPU_core_clock})\n")
+                f.write("=" * 50 + "\n\n")
+                
+                f.write("性能指标:\n")
+                f.write("-" * 30 + "\n")
+                f.write(f"已完成进程数: {completed}\n")
+                f.write(f"总进程数: {total}\n")
+                f.write(f"平均周转时间: {metrics['avg_turnaround_time']:.2f}\n")
+                f.write(f"平均等待时间: {metrics['avg_waiting_time']:.2f}\n")
+                f.write(f"平均带权周转时间: {metrics['avg_weighted_turnaround_time']:.2f}\n")
+                f.write(f"CPU利用率: {metrics['cpu_utilization']:.2f}%\n")
+                f.write(f"CPU总运行时间: {metrics['cpu_total_time']}\n")
+                f.write(f"总服务时间: {metrics['total_service_time']}\n\n")
+                
+                f.write("就绪队列状态:\n")
+                f.write("-" * 30 + "\n")
+                for i, que in enumerate(self._que_list):
+                    que_list = que.get_que_list()
+                    f.write(f"队列 {i+1}: {len(que_list)} 个进程\n")
+                    for j, process in enumerate(que_list):
+                        f.write(f"  进程 {j+1}: {process[0]} (到达: {process[1]}, 剩余: {process[2]})\n")
+                    f.write("\n")
+                
+                f.write("当前运行进程:\n")
+                f.write("-" * 30 + "\n")
+                if self._process_on_core:
+                    f.write(f"进程名: {self._process_on_core.get_name()}\n")
+                    f.write(f"到达时间: {self._process_on_core.time_get_arrive()}\n")
+                    f.write(f"剩余时间: {self._process_on_core.time_get_rest()}\n")
+                    f.write(f"队列ID: {self._process_on_core.get_que_id()}\n")
+                else:
+                    f.write("无进程运行\n")
+                f.write("\n")
+                
+                f.write("等待队列:\n")
+                f.write("-" * 30 + "\n")
+                if self._waiting_process:
+                    f.write(f"进程名: {self._waiting_process.get_name()}\n")
+                    f.write(f"到达时间: {self._waiting_process.time_get_arrive()}\n")
+                    f.write(f"剩余时间: {self._waiting_process.time_get_rest()}\n")
+                    f.write(f"队列ID: {self._waiting_process.get_que_id()}\n")
+                else:
+                    f.write("等待队列为空\n")
+                f.write("\n")
+                
+                f.write("IO事件:\n")
+                f.write("-" * 30 + "\n")
+                if self.io_completion_times:
+                    for comp_time, process in self.io_completion_times.items():
+                        f.write(f"{process.get_name()}: 将在时钟 {comp_time} 完成IO\n")
+                else:
+                    f.write("无IO事件\n")
+                f.write("\n")
+                
+                f.write("已完成进程列表:\n")
+                f.write("-" * 30 + "\n")
+                if self.completed_processes:
+                    for i, proc in enumerate(self.completed_processes):
+                        f.write(f"{i+1}. {proc['name']} (PID: {proc['pid']})\n")
+                        f.write(f"   到达时间: {proc['arrive_time']}, 总时间: {proc['tot_time']}\n")
+                        f.write(f"   周转时间: {proc['turnaround_time']}, 等待时间: {proc['waiting_time']}\n")
+                        f.write(f"   带权周转时间: {proc['weighted_turnaround_time']:.2f}\n")
+                else:
+                    f.write("暂无已完成进程\n")
+            
+            print(f"系统信息已保存到: {filename}")
+            return filename
+        except Exception as e:
+            print(f"保存系统信息失败: {e}")
+            return None
