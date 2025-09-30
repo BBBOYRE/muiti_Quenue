@@ -32,7 +32,8 @@ class CPU_Core:
         self.total_turnaround_time = 0  # 总周转时间
         self.total_service_time = 0  # 总服务时间
         self.total_weighted_turnaround_time = 0  # 总带权周转时间
-        self.cpu_total_time = 0  # CPU总运行时间        iocreator = infinite_shuffled_reproducible(0, 1, 0.01, seed=42)
+        self.cpu_total_time = 0  # CPU总运行时间        
+        iocreator = infinite_shuffled_reproducible(0, 1, 0.01, seed=42)
         self._io_creator = iocreator
         iotimegen = infinite_shuffled_reproducible(3, 8, 1, seed=99)
         self._io_time_gen = iotimegen
