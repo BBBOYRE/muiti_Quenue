@@ -51,6 +51,9 @@ class Process:
         self._tot_time = tot_time  # 进程总共需要运行的时间
         self._que_id = que_id  # 标识进程所属的就绪队列
 
+        #进入最新队列的时间
+        self._time_in_quenue = 0 #初始时间为到达系统的时间，后续会在每一次进入新队列时进行更新
+
         self._run_time = 0  # 最开始已经运行时间是0
         # 修改方式：通过run_for_lclock()方式每次增加1，或通过tiome_set_run()方式直接设置
         self._check_consistency()
@@ -148,4 +151,19 @@ class Process:
     def time_get_run(self) -> int:
         assert self._run_time >= 0
         return self._run_time
+    
+    #用于先进先服务算法的新增函数
+    def time_get_in_quenue(self) -> int:
+        assert self._tot_time >=0
+        return self._time_in_quenue
+
+
+
+    def set_time_in_quenue(self, time: int):
+        """设置进程进入队列的时间"""
+        self._time_in_quenue = time
+
+    
+        
+
         

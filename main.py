@@ -1,19 +1,23 @@
 # 文档2: main.py
+import sys
 from ReadyQue import ReadyQue
 from Process import Process
 from CPU_Core import CPU_Core
 from ProcessGenerator import ProcessGenerator
-#修改处*******************************************
-from new_window_ui import MainWindow
+from new_window_ui import MainWindow,FunctionSelector
 
 if __name__ == '__main__':
 
-    #用于确定如何传入
-    FunctionKey = 'empty'
-
     #在此处创建FunctionSelector
+    selector = FunctionSelector()
+    FunctionKey = selector.get_selection()
+    
+    # 如果用户直接关闭了算法选择窗口，则退出程序
+    if FunctionKey  is None:
+        print("用户取消了选择，程序退出")
+        sys.exit(0)
 
-
+    print(f"最终选择的算法: {FunctionKey}")
 
     #使用FunctionKEy
     rq1 = ReadyQue(algo=FunctionKey, priority=0, time_clip=2)  # 最高优先级，最短时间片
@@ -40,5 +44,6 @@ if __name__ == '__main__':
         ['CPU', []]
     ]
 
-    app = MainWindow(ls1=ls1, ls2=ls2, cpu_core=cpu_core, process_generator=process_generator, rq_list=rq_list)
+    #将FunctionKey传给MainWindow
+    app = MainWindow(ls1=ls1, ls2=ls2, cpu_core=cpu_core, process_generator=process_generator, rq_list=rq_list, function_key=FunctionKey)
     app.mainloop()
