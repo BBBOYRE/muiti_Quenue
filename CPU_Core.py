@@ -6,11 +6,11 @@ from typing import List
 from typing import Union
 import random
 from prettytable import PrettyTable
-
+from shuffle_utils import infinite_shuffled_reproducible
 # CPU时钟，当开始模拟那一刻开始计时
 CPU_core_clock = 0
 CPU_busy_time = 0  # CPU繁忙时间
-
+Total=0
 class CPU_Core:
     def __init__(self, que_list: List[ReadyQue]) -> None:
         if not que_list:
@@ -32,7 +32,11 @@ class CPU_Core:
         self.total_turnaround_time = 0  # 总周转时间
         self.total_service_time = 0  # 总服务时间
         self.total_weighted_turnaround_time = 0  # 总带权周转时间
-        self.cpu_total_time = 0  # CPU总运行时间
+        self.cpu_total_time = 0  # CPU总运行时间        
+        iocreator = infinite_shuffled_reproducible(0, 1, 0.01)
+        self._io_creator = iocreator
+        iotimegen = infinite_shuffled_reproducible(3, 8, 1)
+        self._io_time_gen = iotimegen
     # if que 有问题
     #在 run_for_1clk中被调用
     def _get_next_process(self) -> Union[Process, int]:
@@ -136,7 +140,7 @@ class CPU_Core:
 
         # 随机生成IO请求
         self._generate_io_events()
-
+       
         self._brief()
 
     # 打印当前时钟的进程信息
@@ -273,14 +277,14 @@ class CPU_Core:
         if (self._process_on_core and
                 self._process_on_core.get_name() != 'HANGING' and
                 "Interrupt" not in self._process_on_core.get_name() and
-                random.random() < 0.1):
+                next(self._io_creator) < 0.10):
 
             # 检查等待队列是否已满（只能有一个进程）
             if self._waiting_process is not None:
                 print("Waiting queue is full, cannot add IO request")
                 return
 
-            io_time = random.randint(3, 8)
+            io_time = next(self._io_time_gen)
             self.io_interrupts.append({
                 'process': self._process_on_core,
                 'start_time': CPU_core_clock,
@@ -356,10 +360,18 @@ class CPU_Core:
     def save_system_info_to_file(self):
         """将当前系统信息保存到文件"""
         filename = "System_information.txt"
+        global Total
         try:
             metrics = self.get_performance_metrics()
             completed = metrics['completed_count']
-            total = completed + sum(len(q.get_que_list()) for q in self._que_list)
+            Total = completed + sum(len(q.get_que_list()) for q in self._que_list)
+            if(self._waiting_process!=None): 
+                Total+=1
+
+            if(self._process_on_core and 
+                                self._process_on_core.get_name() != 'HANGING' and 
+                                "Interrupt" not in self._process_on_core.get_name()):
+                Total+=1
             
             with open(filename, 'a', encoding='utf-8') as f:
                 f.write("=" * 50 + "\n")
@@ -369,7 +381,7 @@ class CPU_Core:
                 f.write("性能指标:\n")
                 f.write("-" * 30 + "\n")
                 f.write(f"已完成进程数: {completed}\n")
-                f.write(f"总进程数: {total}\n")
+                f.write(f"总进程数: {Total}\n")
                 f.write(f"平均周转时间: {metrics['avg_turnaround_time']:.2f}\n")
                 f.write(f"平均等待时间: {metrics['avg_waiting_time']:.2f}\n")
                 f.write(f"平均带权周转时间: {metrics['avg_weighted_turnaround_time']:.2f}\n")
