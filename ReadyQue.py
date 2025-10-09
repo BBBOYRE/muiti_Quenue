@@ -32,7 +32,7 @@ class _PCBHeap:
 
 class ReadyQue:
     # 构建一个就绪队列需要: 算法, 队列优先级, 时间片长度
-    def __init__(self, algo: str, priority: int, time_clip: int):
+    def __init__(self, algo: str, priority: int, time_clip: int):      
         if algo != 'SJF' and algo != 'FIFO' and algo != 'HRRN':
             raise TypeError(f'{algo} is not a supported algorithm(FIFO, SJF, HRRN)')
 
@@ -58,35 +58,71 @@ class ReadyQue:
                 # 剩余时间越少越优先
                 return p.time_get_rest()
             elif self._algorithm == 'HRRN':
-                # 响应比 = (等待时间 + 估计运行时间) / 估计运行时间
-                # 估计运行时间在剩余时间上加一个[0, 1)的噪音来模拟, 不用负数防止出错
-                runtime_assume = p.time_get_rest() + random.uniform(0, 1)
-                response_ratio = (p.time_get_waiting() + runtime_assume) / runtime_assume
-                # HRRN是最高相应比优先, 为了配合小根堆, 取个负数
-                return -response_ratio
-
+                # 对于HRRN，优先级是动态的，在pop()中计算。
+                # 在这里分配一个默认优先级。
+                return 0
+            
         return _PCB(process=process, priority=get_priority(process))
 
     # 向就绪队列中加入一个新的进程
     def offer(self, process: Process):
 
         from CPU_Core import CPU_core_clock #导入CPU时钟
+
         process.set_time_in_quenue(CPU_core_clock)
 
         pcb = self._process2pcb(process)
         self._pcb_heap.push(pcb)
         self._que_tot_time += process.time_get_rest()
+
     # 根据算法, 在队列中选择一个进程, 如果队列是空的, 返回一个闲逛进程的单例
     # 返回的是[进程, 计划时间]
     def pop(self) -> Union[Process, int]:
-        top = self._pcb_heap.pop()
-        # top是None的话, 返回一个T=1的闲逛进程
-        if not top:
-            from CPU_Core import CPU_core_clock
+        from CPU_Core import CPU_core_clock # 必须在这里导入以获取当前时间
+
+        if self.is_empty():
             return Process(name='HANGING', arrive_time=CPU_core_clock, tot_time=1, que_id=0), 1
+
+        if self._algorithm == 'HRRN':
+            # 对于HRRN，每次选择前都必须动态重新计算优先级，
+            # 因为等待时间在不断变化。
+            for pcb in self._pcb_heap._heap:
+                p = pcb.process
+                
+                # 正确计算等待时间：在系统中的时间 - 已运行时间
+                waiting_time = (CPU_core_clock - p.time_get_arrive()) - p.time_get_run()
+                # 等待时间不能为负。
+                if waiting_time < 0:
+                    waiting_time = 0
+                
+                # 使用总服务时间计算响应比，这是HRRN的标准做法。
+                service_time = p.time_get_total()
+
+                # 响应比 = (等待时间 + 服务时间) / 服务时间
+                if service_time > 0:
+                    response_ratio = (waiting_time + service_time) / service_time
+                    print(f"{pcb.process.get_name()}:{response_ratio}\n")
+                else:
+                    # 如果服务时间为0，则分配最高优先级以将其清除。
+                    response_ratio = float('inf')
+
+                # 更新PCB的优先级。我们使用负数，因为它是一个最小堆，
+                # 而我们想要最高的响应比。
+                pcb.priority = -response_ratio
+            
+            # 使用新计算的优先级重建堆属性。
+            self._pcb_heap.reheapify()
+
+        # 现在，弹出优先级最高的进程（即最小堆中最小的项）。
+        top = self._pcb_heap.pop()
+        
+        if not top:
+            return Process(name='HANGING', arrive_time=CPU_core_clock, tot_time=1, que_id=0), 1
+            
         self._que_tot_time -= top.process.time_get_rest()
         assert self._que_tot_time >= 0
         return top.process, min(self._time_clip, top.process.time_get_rest())
+
 
     def get_que_tot_time(self) -> int:
         return self._que_tot_time
@@ -138,6 +174,10 @@ class _PCBHeap:
         if not self._heap:
             return None
         return self._heap[0]
+
+    def reheapify(self) -> None:
+        """以线性时间将列表重新组织成一个堆。"""
+        heapq.heapify(self._heap)
 
     def __len__(self) -> int:
         return len(self._heap)
